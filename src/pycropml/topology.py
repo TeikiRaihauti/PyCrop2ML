@@ -99,19 +99,23 @@ class Topology:
                 self.pkg = input(f"Give the path of package {self.name}")
         self.data = Path(self.pkg)/"crop2ml"
         self.diff_in, self.diff_out = {}, {}
-        composite_file = self.data.glob("composition*.xml")[0]
-        self.mu = model_parser(self.pkg)
-        self.model, = composition.model_parser(composite_file)
-        self.pkgs[self.name] = [self.pkg, self.model]
-        self.model.inputs = self.meta_inp(self.name)
-        self.model.outputs = self.meta_out(self.name)
-        self.model.ext = self.meta_ext(self.name)
-        self.model.states = self.findstates(self.model.inputs, self.model.outputs)
-        self.model.path = Path(self.pkg)
-        self.minout()
-        self.path_pkg = None
-        self.model.diff_in = self.diff_in
-        self.model.diff_out = self.diff_out
+        composite_file = None
+        composite_files = self.data.glob("composition*.xml")
+        if composite_files:
+            composite_file = composite_files[0]
+            self.mu = model_parser(self.pkg)
+            self.model, = composition.model_parser(composite_file)
+            self.pkgs[self.name] = [self.pkg, self.model]
+            self.model.inputs = self.meta_inp(self.name)
+            self.model.outputs = self.meta_out(self.name)
+            self.model.ext = self.meta_ext(self.name)
+            self.model.states = self.findstates(self.model.inputs, self.model.outputs)
+            self.model.path = Path(self.pkg)
+            self.minout()
+            self.path_pkg = None
+            self.model.diff_in = self.diff_in
+            self.model.diff_out = self.diff_out
+        self.composite_file = composite_file
          
     def isPackage(self, name):
         if sys.version_info[0] >= 3:
@@ -317,10 +321,14 @@ class Topology:
             sig = signature(mod)
             if mod.package_name:
                 n = mod.package_name.replace("-", "_")
-                code += f'from {n}.{sig} import model_{sig}\n'
+                code += f'from {n}.{sig} import model_{sig}'
             else:
                 n = self.name.replace("-", "_")
-                code += f'from {n}.{sig} import model_{sig}\n'
+                code += f'from {n}.{sig} import model_{sig}'
+            if mod.initialization:
+               code += f', init_{sig}\n'
+            else:
+                code += '\n'     
         name = signature(self.model)
         sig_params = ",\n      ".join(map(my_input, self.meta_inp(self.name)))
         signature_mod = f"def model_{name}({sig_params}):"
@@ -330,7 +338,7 @@ class Topology:
         lines = [tab+l for l in self.algorithm().split('\n') if l.split()]
         lines.append(self.outs_assignment())
         code += '\n'.join(lines)
-        code += "\n" + tab + "return " + ", ".join([out.name for out in self.model.outputs])
+        code += "\n" + tab + "return " + "(" + ", ".join([out.name for out in self.model.outputs]) + ")"
         out_states = [out for out in self.model.outputs if out.variablecategory == "state"]
         if self.model.initialization:
             file_init = self.model.initialization[0].filename
@@ -343,6 +351,83 @@ class Topology:
                 code += self.val_init(self.model)
                 code += '\n'.join(lines)
                 code += '\n' + tab + 'return  ' + ', '.join(self.listab) + '\n'
+        
+        else:
+            z = self.initialization2()
+            if z:
+                code += self.generate_function_signature2(self.model) + '\n'
+                code += self.val_init2(self.model)
+                # call the initialization method of all the models in model(model.model) if it exists
+                code += self.initialization2()
+                code += self.initreturn()
+        return code
+
+    def val_init2(self, model):
+        statenames = [st.name for st in model.states]
+        inouts = model.inputs + model.outputs
+        #inout = inputs + outputs
+        tab = ' '*4
+        code = ""
+        outs = []
+        for inp in inouts:
+            if inp.name not in outs and inp.name in statenames:
+                outs.append(inp.name)
+                code += tab+"cdef "+my_input(inp, defa=False)+"\n"
+        return code
+    
+    def initreturn(self):
+        # return all the unique state variables and the parameters whose parametercategory is private
+        tab = ' '*4
+        outs = []
+        for mod in self.model.model:
+            for inp in mod.inputs:
+                if "variablecategory" in dir(inp) and inp.variablecategory == "state" and inp.name not in outs:
+                    outs.append(inp.name)
+                if "parametercategory" in dir(inp) and inp.parametercategory == "private" and inp.name not in outs:
+                    outs.append(inp.name)
+        code = tab + "return " + "(" + ", ".join(outs) + ")" + "\n"
+        return code
+    
+    def initialization2(self):
+        """call the initialization method of all the models in model(model.model) if it exists
+        """
+        code = ""
+        tab = ' '*4
+        for mod in self.model.model:
+            if mod.initialization:
+                # o1,02 = init_mod1(i1, i2)
+                par = []
+                outs = []
+                for inp in mod.inputs:
+                    if "parametercategory" in dir(inp):
+                        par.append(inp.name)  
+                    elif inp.variablecategory == "exogenous":
+                        par.append(inp.name)
+                    if "variablecategory" in dir(inp) and inp.variablecategory == "state":
+                        outs.append(inp.name)
+                    elif "parametercategory" in dir(inp) and inp.parametercategory == "private":
+                        outs.append(inp.name) 
+                code += tab + f"{', '.join(outs)} = init_{signature(mod)}({', '.join(par)})\n" 
+        return code      
+    
+    def generate_function_signature2(self, model):
+        code=""
+        # get in inputs unique exogenous variables, parameters from all models in model (model.model) to create signature
+        tab = []
+        init_inp=[]
+        for mod in model.model:
+            for inp in mod.inputs:
+                if inp.name not in tab and (("variablecategory" in dir(inp) and inp.variablecategory == "exogenous") or ("parametercategory" in dir(inp))):
+                    tab.append(inp.name)
+                    init_inp.append(inp)
+        code = f'\n\ndef init_{signature(model)}('
+        code_size = len(code)
+        #_input_names = [inp.name.lower() for inp in inputs]
+        ins = [my_input(inp) for inp in init_inp]
+        separator = ',\n' + code_size*' '
+        code += separator.join(ins)
+        code += '):\n'        
+        
         return code
 
     def generate_function_signature(self, model):
@@ -390,7 +475,7 @@ class Topology:
                 if inp.datatype == "STRING":
                     tab += f"    cdef str {name} = '' \n"
                 if inp.datatype == "BOOLEAN":
-                    tab += f"    cdef bool {name} = FALSE\n"
+                    tab += f"    cdef bool {name} = False\n"
                 if inp.datatype == "INTLIST":
                     tab += f"    cdef intlist {name}\n"
                 if inp.datatype == "DOUBLELIST":
@@ -404,7 +489,7 @@ class Topology:
                 if inp.datatype == "INTARRAY":
                     tab += f"    cdef intarray {name}\n"
                 if inp.datatype == "DOUBLEARRAY":
-                    tab += f"    cdef doublarray {name}\n"
+                    tab += f"    cdef doublearray {name}\n"
                 if inp.datatype == "STRINGARRAY":
                     tab += f"    cdef stringarray {name}\n"
         return tab       
