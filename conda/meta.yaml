@@ -11,26 +11,27 @@ build:
   #noarch: python  [unix]
   preserve_egg_dir: True
   number: 0
-  script: {{PYTHON}} setup.py install 
+  script: {{ PYTHON }} -m pip install . --no-deps -vv
   entry: 
     - cyml = pycropml.main:main
 
 requirements:
   build:
     - python {{PY_VER}}
+    - pip
     - setuptools
   run:
     - python {{PY_VER}}
     - antlr4-python3-runtime  ==4.8
-    - cython ==0.29.21
+    - cython >=0.29.37,<3
     - xmlformatter
     - path
-    {% if PY_VER.startswith("3.7") %}
-    - numpy ==1.16.6  # For Python 3.7
-    {% elif PY_VER.startswith("3.8") %}
-    - numpy ==1.22.4  # For Python 3.8
-    {% elif PY_VER.startswith("3.9") %}
+    {% if PY_VER.startswith("3.9") %}
     - numpy ==2.0.2   # For Python 3.9
+    {% elif PY_VER.startswith("3.10") %}
+    - numpy ==2.0.2   # For Python 3.10
+    {% elif PY_VER.startswith("3.11") %}
+    - numpy ==2.0.2   # For Python 3.11
     {% endif %}
     - pyyaml
     - six

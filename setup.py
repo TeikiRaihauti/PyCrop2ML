@@ -55,6 +55,20 @@ setup_kwds = dict(
     setup_requires=[
         ],
     install_requires=[
+        "path",
+        "six",
+        "nbformat",
+        "numpy==2.0.2; python_version >= '3.9'",
+        "Cython>=0.29.37,<3",
+        "networkx",
+        "graphviz",
+        "pydot",
+        "pyyaml",
+        "unyt",
+        "IPython",
+        "antlr4-python3-runtime==4.8",
+        "xmlformatter",
+        "pandas==2.2.3; python_version >= '3.9'",
         ],
     tests_require=[
         "pytest",
