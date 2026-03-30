@@ -13,6 +13,22 @@ class CodeGenerator(NodeVisitor):
         self.precedence = [0]
 
     def write(self, x):
+        if not isinstance(x, str):
+            import traceback
+            print(f"\n*** NODE LEAK: write() received {type(x).__name__} instead of str ***")
+            print(f"    value: {x!r}")
+            print("the ast", x.y)
+            if hasattr(x, 'type'):
+                print(f"    node.type: {x.type}")
+            if hasattr(x, '__dict__'):
+                print(f"    attrs: {list(x.__dict__.keys())}")
+            traceback.print_stack(limit=10)
+            # Convert to string to let execution continue and find all leaks
+            #x = str(x)
+            # write an error message in the output to make it clear something went wrong and raise
+            raise TypeError(f"write() expected str but got {type(x).__name__} with value {x!r}")
+            
+            
         if self.new_lines:
             if self.result:
                 self.result.append('\n' * self.new_lines)
@@ -26,14 +42,14 @@ class CodeGenerator(NodeVisitor):
             self.write('# line: %s' % node.lineno)
             self.new_lines = 1
 
-    
     def body(self, statements):
         self.new_line = True
         self.indentation += 1
         if isinstance(statements, list):
             for stmt in statements:
                 self.visit(stmt)
-        else: self.visit(statements)
+        else:
+            self.visit(statements)
         self.indentation -= 1
 
     def body_or_else(self, node):
@@ -142,27 +158,17 @@ class CodeGenerator(NodeVisitor):
     
         
     def safe_double(self, node):
-        if  sys.version_info.major<3:
-            if '"' in node.value:
-                if "'" in node.value:
-                    s = '"%s"' % node.value.replace('"', '\\"')
-                else:
-                    s = "'%s'" % node.value
-            else:
-                s = '"%s"' % node.value
-        else:
-            if b'"' in node.value:
-                if b"'" in node.value:
-                    s = '"%s"' % node.value.replace('"', '\\"')
-                else:
-                    #s = "'%s'" % node.value
-                    s = node.value.decode()
-            else:
-                #s = '"%s"' % node.value 
-                s = '"%s"' % node.value.decode() 
-            
-        self.write(s)
+        # Decode the byte string to a normal string if it's in byte form
+        value = node.value.decode() if isinstance(node.value, bytes) else node.value
     
+        # Escape any existing double quotes in the value
+        escaped_value = value.replace('"', '')
+        escaped_value = escaped_value.replace("'", "")
+    
+        # Wrap the result in double quotes and return
+        self.write(f'"{escaped_value}"')
+
+
     def visit_simpleCall(self, node):
         self.visit(node.value)
         self.write(" %s "%node.op)

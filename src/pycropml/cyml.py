@@ -5,6 +5,7 @@ Created on Tue Mar 19 22:59:23 2019
 @author: midingoy
 """
 import os
+from os.path import isdir
 from path import Path
 import pycropml
 from pycropml.transpiler.main import Main
@@ -15,6 +16,8 @@ from pycropml.transpiler.antlr_py.bioma.run import run_bioma
 from pycropml.transpiler.antlr_py.openalea.run import run_openalea
 from pycropml.transpiler.antlr_py.fortran.run import run_fortran
 from pycropml.transpiler.antlr_py.python.run import run_python
+from pycropml.transpiler.antlr_py.apsim.run import run_apsim
+from pycropml.transpiler.antlr_py.csharp.run import run_csharp
 from pycropml import render_cyml, nameconvention
 from pycropml.pparse import model_parser
 from pycropml.writeTest import WriteTest
@@ -23,21 +26,54 @@ from pycropml.transpiler.generators.javaGenerator import to_struct_java
 from pycropml.topology import Topology
 from pycropml.code2nbk import Model2Nb
 from pycropml.transpiler.generators.pythonGenerator import PythonSimulation
-from pycropml.transpiler.generators.siriusGenerator import to_struct_sirius,to_wrapper_sirius
-from pycropml.transpiler.generators.sirius2Generator import to_struct_sirius2,to_wrapper_sirius2
+from pycropml.transpiler.generators.siriusGenerator import to_struct_sirius, to_wrapper_sirius
+from pycropml.transpiler.generators.sirius2Generator import to_struct_sirius2, to_wrapper_sirius2
 from pycropml.transpiler.generators.recordGenerator import Crop2ML_Vpz
-from pycropml.transpiler.generators.cppGenerator import to_struct_cpp
-import pycropml.transpiler.antlr_py 
+#from pycropml.transpiler.generators.cppGenerator import to_struct_cpp
+import pycropml.transpiler.antlr_py
 
+NAMES = {
+    'r': 'r',
+    'cs': 'csharp',
+    'cpp': 'cpp',
+    "cpp2": "cpp2",
+    'py': 'python',
+    'f90': 'fortran',
+    'java': 'java',
+    'simplace': 'simplace',
+    'sirius': 'sirius',
+    "openalea": "openalea",
+    "apsim": "apsim",
+    "record": "record",
+    "dssat": "dssat",
+    "bioma": "bioma",
+    "stics": "stics",
+    "sirius2": "sirius2"
+}
 
-NAMES = {'r':'r','cs':'csharp','cpp':'cpp', 'py':'python', 'f90':'fortran', 'java':'java', 'simplace':'simplace', 'sirius':'sirius', "openalea":"openalea","apsim":"apsim", "record":"record", "dssat":"dssat","bioma":"bioma", "stics":"stics", "sirius2":"sirius2"}
-ext = {'r':'r','cs':'cs','cpp':'cpp', 'py':'py', 'f90':'f90', 'java':'java', 'simplace':'java', 'sirius':'cs','bioma':'cs', "openalea":"py", "apsim":"cs", "record":"cpp", "dssat":"f90", "stics":"f90", "sirius2":'cs'}
+ext = {'r': 'r',
+       'cs': 'cs',
+       'cpp': 'cpp',
+       "cpp2": "cpp",
+       'py': 'py',
+       'f90': 'f90',
+       'java': 'java',
+       'simplace': 'java',
+       'sirius': 'cs',
+       'bioma': 'cs',
+       "openalea": "py",
+       "apsim": "cs",
+       "record": "cpp",
+       "dssat": "f90",
+       "stics": "f90",
+       "sirius2": 'cs'
+       }
 
-cymltx_languages = ['dssat', "simplace", "bioma", "openalea", "f90", "stics", "py"]
+cymltx_languages = ['dssat', "simplace", "bioma", "openalea", "f90", "stics", "py", "apsim","cs"]
 langs = ["cs", "cpp", "java", "f90", "r", "py"]
 
-domain_class = ["cs", "java", 'sirius','cpp', "bioma", "sirius2"]
-wrapper=["cs", "sirius", "bioma", "sirius2"]
+domain_class = ["cs", "java", "sirius", "cpp", "cpp2", "bioma", "sirius2", "apsim"]
+wrapper=["cs", "sirius", "bioma", "sirius2", "apsim"]
 platform = ["simplace","sirius","openalea","apsim","bioma","record","dssat", "stics", "sirius2"]
 
 def transpile_file(source, language):
@@ -78,7 +114,7 @@ def transpile_package(package, language):
         dir_test.mkdir()
     if not dir_doc.is_dir():
         dir_doc.mkdir()
-        
+
     dir_images = Path(os.path.join(dir_doc, 'images'))
     if not dir_images.is_dir():
         dir_images.mkdir()
@@ -90,8 +126,8 @@ def transpile_package(package, language):
     
     if not tg_rep1.is_dir():
         tg_rep1.mkdir()
-    
-    namep_ = namep.replace("-", "_")    
+
+    namep_ = namep.replace("-", "_")
     tg_rep = Path(os.path.join(tg_rep1, namep_))
     if not tg_rep.is_dir():
         tg_rep.mkdir()
@@ -109,9 +145,9 @@ def transpile_package(package, language):
     mc_name = T.model.name
 
     # Record VPZ
-    #if language == "record":
-        #vpz = Crop2ML_Vpz(T)
-        #print(vpz.create())
+    # if language == "record":
+    # vpz = Crop2ML_Vpz(T)
+    # print(vpz.create())
 
     # domain class
     if language in domain_class:
@@ -129,32 +165,36 @@ def transpile_package(package, language):
         name = os.path.split(file)[1].split(".")[0]
         for model in models:  # in the case we haven't the same order
             if name.lower() == model.name.lower() and prefix(model) != "function":
+                #getattr(getattr(pycropml.transpiler.generators, f'{NAMES[language]}Generator'),
+                #        f'header_mu_cpp2')(model, tg_rep, mc_name)
+
                 test = Main(file, language, model, T.model.name)
                 test.parse()
                 test.to_ast(source)
                 code = test.to_source()
-                filename = Path(os.path.join(tg_rep, f"{nameconvention.signature(model, ext[language])}.{ext[language]}"))
+                filename = Path(
+                    os.path.join(tg_rep, f"{nameconvention.signature(model, ext[language])}.{ext[language]}"))
                 with open(filename, "wb") as tg_file:
                     tg_file.write(code.encode('utf-8'))
                 if language in langs:
                     Model2Nb(model, code, name, dir_test_lang).generate_nb(language, tg_rep, namep, mc_name)
-                    #code2nbk.generate_notebook(code, name, dir_nb_lang)
+                    # code2nbk.generate_notebook(code, name, dir_nb_lang)
 
     # Create Cyml Composite model
     T_pyx = T.algo2cyml(dir_images)
     fileT = Path(os.path.join(cyml_rep, f"{mc_name}Component.pyx"))
     with open(fileT, "wb") as tg_file:
-        tg_file.write(T_pyx.encode('utf-8'))  
+        tg_file.write(T_pyx.encode('utf-8'))
 
     filename = Path(os.path.join(tg_rep, f"{mc_name}Component.{ext[language]}"))
     code = T.compotranslate(language).encode('utf-8')
     if code:
         with open(filename, "wb") as tg_file:
-            tg_file.write(code)   
+            tg_file.write(code)
 
     # create computing algorithm
     if language == "py":
-        simulation = PythonSimulation(T.model)
+        simulation = PythonSimulation(T.model, package_name=namep)
         simulation.generate()
         code = ''.join(simulation.result)
         filename = Path(os.path.join(tg_rep, "simulation.py"))
@@ -163,10 +203,13 @@ def transpile_package(package, language):
             tg_file.write(code.encode("utf-8"))
         with open(initfile, "wb") as tg_file:
             tg_file.write("".encode("utf-8"))
-        setup = PythonSimulation(T.model)
-        setup.generate_setup()
+
+        setup = PythonSimulation(T.model, package_name=namep)
+        #setup.generate_setup()
+        setup.generate_pyproject()
         code = ''.join(setup.result)
-        setupfile = Path(os.path.join(tg_rep1, "setup.py"))
+        #setupfile = Path(os.path.join(tg_rep1, "setup.py"))
+        setupfile = Path(os.path.join(tg_rep1, "pyproject.toml"))
         with open(setupfile, "wb") as tg_file:
             tg_file.write(code.encode("utf-8"))
 
@@ -187,7 +230,8 @@ def transpile_component(component, package, language):
     """
 
     translator = {
-        format: getattr(getattr(getattr(pycropml.transpiler.antlr_py, NAMES[format].lower()), 'run'), f'run_{NAMES[format]}')
+        format: getattr(getattr(getattr(pycropml.transpiler.antlr_py, NAMES[format].lower()), 'run'),
+                        f'run_{NAMES[format]}')
         for format in cymltx_languages
     }
     print('translator :', translator)

@@ -5,14 +5,16 @@ Problems:
 """
 from __future__ import print_function
 from __future__ import absolute_import
-from path import Path
-from datetime import datetime
 import os.path
-from pycropml.modelunit import ModelUnit
+from os.path import isdir
+import sys
+from path import Path
 import six
 import shutil
+from datetime import datetime
+from pycropml.modelunit import ModelUnit
 from . import error
-import sys
+from . import split_function
 
 DATATYPE = {}
 DATATYPE['INT'] = "int"
@@ -21,6 +23,7 @@ DATATYPE['DOUBLE'] = "float"
 DATATYPE['DOUBLELIST'] = "list"
 DATATYPE['INTLIST'] = "list"
 DATATYPE['STRINGLIST'] = "list"
+DATATYPE['STRINGARRAY'] = "str"
 DATATYPE['CHARLIST'] = "list"
 DATATYPE['DATELIST'] = "datelist"
 DATATYPE['DOUBLEARRAY'] = "float"
@@ -69,6 +72,7 @@ class Model2Package(object):
             self.dir = directory.mkdir()
 
         files = []
+    
         count = 0
         for model in self.models:          
             self.generate_component(model) 
@@ -111,8 +115,9 @@ class Model2Package(object):
                         source = f.read()
                         self.code += source 
                         self.code += "\n\n\n"
-     
+
         return self.code
+
 
     def generate_algorithm(self, model_unit):
         outputs = model_unit.outputs
@@ -167,6 +172,8 @@ class Model2Package(object):
                 outs.append(inp)
                 if not inp.default:
                     other += tab + inp.name + " = " + default_value(inp)+"\n"
+            elif "parametercategory" in dir(inp) and inp.parametercategory == "private":
+                outs.append(inp)
         
         code = ""
         if model_unit.initialization:
@@ -446,14 +453,14 @@ def my_input(_input, defa=False):
                 default = float(default) if DATATYPE[_type] == "float" else int(default)
                 return f'{DATATYPE[_type]} {name} = {default}'
         else:
-            if _type == "DOUBLEARRAY" or _type == "INTARRAY":
+            if _type == "DOUBLEARRAY" or _type == "INTARRAY" or _type == "STRINGARRAY":
                 length = _input.len
                     #print("%s %s[%s]"%(DATATYPE[_type], name,len))
                 return (f"{DATATYPE[_type]} {name}[{length}]")
             else:
                 return (f"{DATATYPE2[_type]} {name}")
     else:
-            if _type == "DOUBLEARRAY" or _type == "INTARRAY":
+            if _type == "DOUBLEARRAY" or _type == "INTARRAY" or _type == "STRINGARRAY":
                 length = _input.len
                     #print("%s %s[%s]"%(DATATYPE[_type], name,len))
                 return (f"{DATATYPE[_type]} {name}[{length}]")
@@ -470,6 +477,7 @@ def default_value(inp):
     elif type_.endswith("ARRAY") and inp.len:
         if type_=="INTARRAY": return f"array('i', [0]*{inp.len})"
         if type_=="DOUBLEARRAY": return f"array('f', [0.0]*{inp.len})"
+    elif type_ == "STRING": return "\'\'"
 
 DATATYPE2 = {}
 DATATYPE2['INT'] = "int"
@@ -478,6 +486,7 @@ DATATYPE2['DOUBLE'] = "float"
 DATATYPE2['DOUBLELIST'] = "floatlist"
 DATATYPE2['INTLIST'] = "intlist"
 DATATYPE2['STRINGLIST'] = "stringlist"
+DATATYPE2['STRINGARRAY'] = "stringarray"
 DATATYPE2['CHARLIST'] = "stringlist"
 DATATYPE2['DATELIST'] = "datelist"
 DATATYPE2['DOUBLEARRAY'] = "floatarray"

@@ -109,7 +109,7 @@ class CymlGenerator(CodeGenerator, CymlRules):
             self.translate_com(node.comments)
         self.newline(node)
         self.write('if ')
-        if node.test.right.type=="none" and node.test.op=="==":
+        if "right" in dir(node.test) and node.test.right.type=="none" and node.test.op=="==":
             self.visit(node.test.left)
             self.write(" is None")
         else: self.visit(node.test)
@@ -174,7 +174,7 @@ class CymlGenerator(CodeGenerator, CymlRules):
         self.visit(node.expr)
     
     def visit_list(self, node):
-        if node.elements.type == "binary_op":     
+        if "type" in dir(node.elements) and node.elements.type == "binary_op":     
             self.visit(node.elements.left.elements[0])
         else:
             self.emit_sequence(node.elements, u"[]")
@@ -232,6 +232,8 @@ class CymlGenerator(CodeGenerator, CymlRules):
             self.visit(node.args[0])
             self.write(u":")
             self.visit(node.args[1])
+        if node.message == "slice_":
+            self.write(u":")
         self.write(u"]")
 
 
@@ -281,11 +283,19 @@ class CymlGenerator(CodeGenerator, CymlRules):
     
     def visit_unary_op(self, node):
         op = node.operator
-        prec = self.unop_precedence[str(op)]
-        self.operator_enter(prec)
-        self.write(u"%s" % self.unary_op[str(op)])
-        self.visit(node.value)
-        self.operator_exit()
+        if op == "++" or op == "--":
+            self.newline(node)
+            self.visit(node.value)
+            self.write("=")
+            self.visit(node.value)
+            self.write(" + 1") if op == "++" else self.write(" - 1")
+            self.newline(node)
+        else:
+            prec = self.unop_precedence[str(op)]
+            self.operator_enter(prec)
+            self.write(u"%s" % self.unary_op[str(op)])
+            self.visit(node.value)
+            self.operator_exit()
 
     def visit_function_definition(self, node):
         self.arrVar = {}
@@ -295,6 +305,7 @@ class CymlGenerator(CodeGenerator, CymlRules):
         self.newline(extra=1)
         self.newline(node)
         self.write('def %s(' % node.name)
+        #print(node.name, [p.name for p in node.params])
         for i, pa in enumerate(node.params):
             if isinstance(pa.pseudo_type, str):
                 self.write("%s %s"%(pa.pseudo_type, pa.name))
@@ -341,9 +352,10 @@ class CymlGenerator(CodeGenerator, CymlRules):
         self.newline(node)
         if node.comments:
             self.translate_com(node.comments)    
-        #print(node.y)
         if node.decl[0].type=="list" and ("elements" not in dir(node.decl[0]) or not node.decl[0].elements):
-            self.write("cdef %s "%(node.decl[0].pseudo_type[1].lower() + node.decl[0].pseudo_type[0]))
+            xx = node.decl[0].pseudo_type[1].lower()
+            if xx == "datetime": xx = "date"
+            self.write("cdef %s "%(xx + node.decl[0].pseudo_type[0]))
         elif node.decl[0].type == "array"and "elements" not in dir(node.decl[0]):
             if "elts" not in dir(node.decl[0]):
                 self.write("cdef %s "%(node.decl[0].pseudo_type[-1])) 
@@ -352,7 +364,7 @@ class CymlGenerator(CodeGenerator, CymlRules):
         else:
             self.write("cdef %s "%node.decl[0].type)
             
-        for p, n in enumerate(node.decl) :           
+        for p, n in enumerate(node.decl) :      
             if 'value' in dir(n) and n.type in ("int", "float", "double"):
                 self.write("%s = "%(n.name))               
                 self.visit(n.value) if isinstance(n.value, Node) else self.write(n.value)
@@ -404,16 +416,16 @@ class CymlGenerator(CodeGenerator, CymlRules):
             type_ = node.pseudo_type[-1]
             if type_=="int" or type_=="bool": 
                 newtype="i"
-                self.write("array('%s', [0]*"%newtype)
+                self.write("array('%s', [0]*("%newtype)
             if type_=="float": 
                 newtype="f"
-                self.write("array('%s', [0.0]*"%newtype)
+                self.write("array('%s', [0.0]*("%newtype)
             if type_=="str": 
                 newtype="u"
-                self.write("array('%s', [None]*"%newtype) # to check
+                self.write("array('%s', [None]*("%newtype) # to check
             
             self.visit(node.elts)            #one dimension array
-            self.write(")")
+            self.write("))")
             
         elif isinstance(node.elements, Node):
             type_ = node.elements.left.elements[0].type
@@ -422,9 +434,9 @@ class CymlGenerator(CodeGenerator, CymlRules):
             if type_=="str": newtype="u"
             self.write("array('%s', ["%newtype)
             self.visit(node.elements.left.elements[0])
-            self.write(']*')
+            self.write(']*(')
             self.visit(node.elements.right)
-            self.write(")")
+            self.write("))")
         else:
             type_ = node.elements[0].type
             if type_=="int" or type_=="bool": newtype="i"
@@ -465,6 +477,7 @@ class CymlGenerator(CodeGenerator, CymlRules):
         self.write(')')
     
     def visit_standard_call(self, node):
+        #print(node.namespace, node.function)
         node.function = self.functions[node.namespace][node.function]
         if callable(node.function):
                self.visit(node.function(node)) 
