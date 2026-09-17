@@ -3,7 +3,6 @@ from __future__ import absolute_import
 from pycropml.transpiler.errors import PseudoCythonTypeCheckError
 from pycropml.transpiler.helpers import serialize_type
 from Cython.Compiler import ExprNodes
-from six.moves import zip
 
 
 # based on pseudo
@@ -208,6 +207,8 @@ def or_(l, r):
 def binary_and(l, r):
     if l == r == 'int':
         return [l, r, l]
+    elif l == 'bool' and r == 'bool':
+        return [l, r, 'bool']
     else:
         raise PseudoCythonTypeCheckError("wrong types for &: %s and %s" % (serialize_type(l), serialize_type(r)))
 
