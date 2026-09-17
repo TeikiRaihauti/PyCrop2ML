@@ -21,8 +21,9 @@ from pycropml.transpiler.main import languages
 
 
 def main():
+    print("re")
     usage = """Usage: %prog [options] package language1 [languages]
-
+    
 cyml transpiler translate a cyml source code or a Crop2ML package with algo in cyml
 language to target language.
 

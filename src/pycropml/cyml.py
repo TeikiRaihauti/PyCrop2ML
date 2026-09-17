@@ -5,7 +5,7 @@ Created on Tue Mar 19 22:59:23 2019
 @author: midingoy
 """
 import os
-from os.path import isdir
+from os.path import Path.is_dir
 from path import Path
 import pycropml
 from pycropml.transpiler.main import Main
@@ -107,15 +107,15 @@ def transpile_package(package, language):
     dir_doc = Path(os.path.join(pkg, 'doc'))
 
     # Generate packages if the directories does not exists.
-    if not isdir(output):
+    if not Path.is_dir(output):
         output.mkdir()
-    if not isdir(dir_test):
+    if not Path.is_dir(dir_test):
         dir_test.mkdir()
-    if not isdir(dir_doc):
+    if not Path.is_dir(dir_doc):
         dir_doc.mkdir()
 
     dir_images = Path(os.path.join(dir_doc, 'images'))
-    if not isdir(dir_images):
+    if not Path.is_dir(dir_images):
         dir_images.mkdir()
 
     m2p = render_cyml.Model2Package(models, dir=output)
@@ -123,15 +123,15 @@ def transpile_package(package, language):
     tg_rep1 = Path(os.path.join(output, language))  # target language models  directory in output
     dir_test_lang = Path(os.path.join(dir_test, language))
     
-    if not isdir(tg_rep1):
+    if not Path.is_dir(tg_rep1):
         tg_rep1.mkdir()
 
     namep_ = namep.replace("-", "_")
     tg_rep = Path(os.path.join(tg_rep1, namep_))
-    if not isdir(tg_rep):
+    if not Path.is_dir(tg_rep):
         tg_rep.mkdir()
 
-    if not isdir(dir_test_lang):  #Create if it doesn't exist
+    if not Path.is_dir(dir_test_lang):  #Create if it doesn't exist
         dir_test_lang.mkdir()
 
     m2p.write_tests()
